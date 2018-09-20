@@ -1,6 +1,13 @@
+# TODO:
+# * Export timezone aware date instead of unix epoch
+# * Use object oriented pattern
+# * Save Google auth credentials
+
 import os
 import pprint
 import csv
+
+from datetime import datetime, timedelta
 
 import google.oauth2.credentials
 
@@ -9,27 +16,27 @@ from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 CLIENT_SECRETS_FILE = "client_secret.json"
-DATASET_TARGET_FILE = "steps_by_hour.csv"
-START_TIME_UNIX = 1454313600000
-END_TIME_UNIX = 1536969600000
-BUCKET_DURATION_MS = 3600000
-MAX_REQUEST_INTERVAL_MS = 5184000000
+DATASET_TARGET_FILE = "steps_by_week.csv"
+START_TIME_UNIX = datetime(2018, 1, 1).timestamp() * 1000
+END_TIME_UNIX = datetime.now().timestamp() * 1000
+BUCKET_DURATION_MS = timedelta(days=7).total_seconds() * 1000
+MAX_REQUEST_INTERVAL_MS = timedelta(days=60).total_seconds() * 1000
 
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-def get_authenticated_service():
-    flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE,
+def get_authenticated_service(secrets_file):
+    flow = InstalledAppFlow.from_client_secrets_file(secrets_file,
         "https://www.googleapis.com/auth/fitness.activity.read")
     credentials = flow.run_local_server()
     return build("fitness", "v1", credentials=credentials)
 
-def request_aggregated_steps(service, start_time, end_time):
+def request_aggregated_steps(service, start_time, end_time, bucket_size):
     body = {
         "aggregateBy": [{
             "dataTypeName": "com.google.step_count.delta",
             "dataSourceId": "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps"
         }],
-        "bucketByTime": { "durationMillis": BUCKET_DURATION_MS },
+        "bucketByTime": { "durationMillis": bucket_size },
         "startTimeMillis": start_time,
         "endTimeMillis": end_time,
     }
@@ -49,14 +56,15 @@ def parse_bucketed_steps(buckets):
     return dataset
 
 def export_aggregated_steps():
-    service = get_authenticated_service()
+    service = get_authenticated_service(CLIENT_SECRETS_FILE)
     full_dataset = []
     current_time = START_TIME_UNIX
     while current_time < END_TIME_UNIX:
         dataset = request_aggregated_steps(
-            service    = service,
-            start_time = current_time,
-            end_time   = min(current_time + MAX_REQUEST_INTERVAL_MS, END_TIME_UNIX)
+            service     = service,
+            start_time  = current_time,
+            end_time    = min(current_time + MAX_REQUEST_INTERVAL_MS, int(END_TIME_UNIX)),
+            bucket_size = BUCKET_DURATION_MS,
         )
         full_dataset += dataset
         current_time = current_time + MAX_REQUEST_INTERVAL_MS

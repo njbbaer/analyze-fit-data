@@ -1,7 +1,6 @@
 # TODO:
 # * Export timezone aware date instead of unix epoch
 # * Use object oriented pattern
-# * Don't request partial buckets
 
 import os
 import pprint
@@ -38,17 +37,18 @@ def authenticate_service(secrets_file, token_file):
 
 def request_aggregated_steps(service, start_timestamp, end_timestamp, bucket_interval, max_request_interval):
     full_dataset = []
-    current_time = start_timestamp
-    while current_time < end_timestamp:
+    current_timestamp = start_timestamp
+    while current_timestamp < end_timestamp:
         dataset = _request_aggregated_steps_single(
-            service     = service,
-            start_timestamp  = current_time,
-            end_timestamp    = min(current_time + max_request_interval, int(end_timestamp)),
+            service          = service,
+            start_timestamp  = current_timestamp,
+            end_timestamp    = min(current_timestamp + max_request_interval, int(end_timestamp)),
             bucket_interval  = bucket_interval,
         )
         full_dataset += dataset
-        current_time = current_time + max_request_interval
-        _print_percent_progress(current_time, start_timestamp, end_timestamp)
+        current_timestamp += max_request_interval
+        _print_percent_progress(current_timestamp, start_timestamp, end_timestamp)
+    full_dataset.pop()  # Exclude incomplete final datapoint
     return full_dataset
 
 def export_dataset(dataset, target_file):
@@ -83,8 +83,8 @@ def _parse_bucketed_steps(buckets):
         dataset.append([time, steps])
     return dataset
 
-def _print_percent_progress(current_time, start_timestamp, end_timestamp):
-    ratio = (current_time - start_timestamp) / (end_timestamp - start_timestamp)
+def _print_percent_progress(current_timestamp, start_timestamp, end_timestamp):
+    ratio = (current_timestamp - start_timestamp) / (end_timestamp - start_timestamp)
     percent = min(ratio, 1) * 100
     print(f"{int(percent)}% downloaded")
 

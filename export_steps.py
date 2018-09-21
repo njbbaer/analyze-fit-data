@@ -1,11 +1,12 @@
 # TODO:
-# * Export timezone aware date instead of unix epoch
 # * Use object oriented pattern
+# * Fix daylight savings offset
 
 import os
 import pprint
 import csv
 import pickle
+import pytz
 from datetime import datetime, timedelta
 
 import google.oauth2.credentials
@@ -20,6 +21,8 @@ START_DATETIME = datetime(2018, 1, 1)
 END_DATETIME = datetime.now()
 BUCKET_TIMEDELTA = timedelta(days=7)
 MAX_REQUEST_TIMEDELTA = timedelta(days=60)
+TIMEZONE = pytz.timezone("America/Los_Angeles")
+DATE_FORMAT = "%m/%d/%Y"
 
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
@@ -48,15 +51,18 @@ def request_aggregated_steps(service, start_timestamp, end_timestamp, bucket_int
         full_dataset += dataset
         current_timestamp += max_request_interval
         _print_percent_progress(current_timestamp, start_timestamp, end_timestamp)
-    full_dataset.pop()  # Exclude incomplete final datapoint
+    full_dataset.pop() # Exclude incomplete final datapoint
     return full_dataset
 
-def export_dataset(dataset, target_file):
+def export_dataset(dataset, target_file, date_format, timezone):
     with open(target_file, "w") as csv_file:
         csv_writer = csv.writer(csv_file, delimiter=",")
-        csv_writer.writerow(["unix_epoch_ms", "steps"])
+        csv_writer.writerow(["time", "steps"])
         for line in dataset:
-            csv_writer.writerow(line)
+            timestamp, steps = line
+            dt = datetime.fromtimestamp(timestamp / 1000, tz=timezone) # Convert timestamp to datetime
+            date_string = datetime.strftime(dt, date_format) # Convert datetime to string
+            csv_writer.writerow([date_string, steps])
 
 def _request_aggregated_steps_single(service, start_timestamp, end_timestamp, bucket_interval):
     body = {
@@ -75,9 +81,9 @@ def _request_aggregated_steps_single(service, start_timestamp, end_timestamp, bu
 def _parse_bucketed_steps(buckets):
     dataset = []
     for bucket in buckets:
-        time = bucket["startTimeMillis"]
+        time = int(bucket["startTimeMillis"])
         if bucket["dataset"][0]["point"]:
-            steps = bucket["dataset"][0]["point"][0]["value"][0]["intVal"]
+            steps = int(bucket["dataset"][0]["point"][0]["value"][0]["intVal"])
         else:
             steps = 0
         dataset.append([time, steps])
@@ -88,7 +94,7 @@ def _print_percent_progress(current_timestamp, start_timestamp, end_timestamp):
     percent = min(ratio, 1) * 100
     print(f"{int(percent)}% downloaded")
 
-if __name__ =="__main__":
+if __name__ == "__main__":
     start_timestamp = START_DATETIME.timestamp() * 1000
     end_timestamp = END_DATETIME.timestamp() * 1000
     bucket_interval = BUCKET_TIMEDELTA.total_seconds() * 1000
@@ -101,4 +107,4 @@ if __name__ =="__main__":
                                        bucket_interval,
                                        max_request_interval)
     print(f"Writing to file {DATASET_TARGET_FILE}")
-    export_dataset(dataset, DATASET_TARGET_FILE)
+    export_dataset(dataset, DATASET_TARGET_FILE, DATE_FORMAT, TIMEZONE)

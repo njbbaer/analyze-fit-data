@@ -38,19 +38,19 @@ def authenticate_service(secrets_file, token_file):
             pickle.dump(credentials, file)
     return build("fitness", "v1", credentials=credentials)
 
-def request_aggregated_steps(service, start_timestamp, end_timestamp, bucket_interval, max_request_interval):
+def request_aggregated_steps(service, start_time, end_time, bucket_interval, max_request_interval):
     full_dataset = []
-    current_timestamp = start_timestamp
-    while current_timestamp < end_timestamp:
+    current_time = start_time
+    while current_time < end_time:
         dataset = _request_aggregated_steps_single(
             service          = service,
-            start_timestamp  = current_timestamp,
-            end_timestamp    = min(current_timestamp + max_request_interval, int(end_timestamp)),
+            start_time  = current_time,
+            end_time    = min(current_time + max_request_interval, end_time),
             bucket_interval  = bucket_interval,
         )
         full_dataset += dataset
-        current_timestamp += max_request_interval
-        _print_percent_progress(current_timestamp, start_timestamp, end_timestamp)
+        current_time += max_request_interval
+        _print_percent_progress(current_time, start_time, end_time)
     full_dataset.pop() # Exclude incomplete final datapoint
     return full_dataset
 
@@ -64,15 +64,15 @@ def export_dataset(dataset, target_file, date_format, timezone):
             date_string = datetime.strftime(dt, date_format) # Convert datetime to string
             csv_writer.writerow([date_string, steps])
 
-def _request_aggregated_steps_single(service, start_timestamp, end_timestamp, bucket_interval):
+def _request_aggregated_steps_single(service, start_time, end_time, bucket_interval):
     body = {
         "aggregateBy": [{
             "dataTypeName": "com.google.step_count.delta",
             "dataSourceId": "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps"
         }],
-        "bucketByTime": { "durationMillis": bucket_interval },
-        "startTimeMillis": start_timestamp,
-        "endTimeMillis": end_timestamp,
+        "bucketByTime": { "durationMillis": bucket_interval.total_seconds() * 1000 },
+        "startTimeMillis": int(start_time.timestamp()) * 1000,
+        "endTimeMillis": int(end_time.timestamp()) * 1000,
     }
     request = service.users().dataset().aggregate(userId="me", body=body)
     buckets = request.execute()['bucket']
@@ -89,22 +89,17 @@ def _parse_bucketed_steps(buckets):
         dataset.append([time, steps])
     return dataset
 
-def _print_percent_progress(current_timestamp, start_timestamp, end_timestamp):
-    ratio = (current_timestamp - start_timestamp) / (end_timestamp - start_timestamp)
+def _print_percent_progress(current_time, start_time, end_time):
+    ratio = (current_time - start_time) / (end_time - start_time)
     percent = min(ratio, 1) * 100
     print(f"{int(percent)}% downloaded")
 
 if __name__ == "__main__":
-    start_timestamp = START_DATETIME.timestamp() * 1000
-    end_timestamp = END_DATETIME.timestamp() * 1000
-    bucket_interval = BUCKET_TIMEDELTA.total_seconds() * 1000
-    max_request_interval = MAX_REQUEST_TIMEDELTA.total_seconds() * 1000
-
     service = authenticate_service(CLIENT_SECRETS_FILE, TOKEN_FILE)
     dataset = request_aggregated_steps(service,
-                                       start_timestamp,
-                                       end_timestamp,
-                                       bucket_interval,
-                                       max_request_interval)
+                                       START_DATETIME,
+                                       END_DATETIME,
+                                       BUCKET_TIMEDELTA,
+                                       MAX_REQUEST_TIMEDELTA)
     print(f"Writing to file {DATASET_TARGET_FILE}")
     export_dataset(dataset, DATASET_TARGET_FILE, DATE_FORMAT, TIMEZONE)

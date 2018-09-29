@@ -1,5 +1,6 @@
 # TODO:
 # * Fix daylight savings offset
+# * Rename repository
 
 import os
 import pprint
@@ -33,7 +34,7 @@ class GoogleFitSteps:
         self.service = build("fitness", "v1", credentials=credentials)
 
     def download(self):
-        self._request_aggregated_steps(
+        self._request_steps(
             start_time = self.start_time,
             end_time = datetime.now())
 
@@ -49,17 +50,17 @@ class GoogleFitSteps:
 
     # Private
 
-    def _request_aggregated_steps(self, start_time, end_time):
+    def _request_steps(self, start_time, end_time):
         current_time = start_time
         while current_time < end_time:
-            request_dataset = self._request_aggregated_steps_single(
+            request_dataset = self._single_request_steps(
                 request_start_time = current_time,
                 request_end_time   = min(current_time + self.max_request_interval, end_time))
             self.dataset += request_dataset
             current_time += self.max_request_interval
         self.dataset.pop() # Exclude incomplete final datapoint
 
-    def _request_aggregated_steps_single(self, request_start_time, request_end_time):
+    def _single_request_steps(self, request_start_time, request_end_time):
         body = {
             "aggregateBy": [{
                 "dataTypeName": "com.google.step_count.delta",
@@ -89,7 +90,7 @@ if __name__ == "__main__":
     steps = GoogleFitSteps(
         start_time           = datetime(2018, 1, 1),
         bucket_interval      = timedelta(days=1),
-        max_request_interval = timedelta(days=60))
+        max_request_interval = timedelta(days=90))
 
     steps.authenticate(
         secrets_file     = "client_secret.json",

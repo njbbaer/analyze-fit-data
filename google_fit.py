@@ -1,6 +1,7 @@
 # TODO:
 # * Fix daylight savings offset
 # * Rename repository
+# * Use Flask to authenticate
 
 import os
 import pprint
@@ -33,7 +34,7 @@ class GoogleFitSteps:
                 pickle.dump(credentials, file)
         self.service = build("fitness", "v1", credentials=credentials)
 
-    def download(self):
+    def update(self):
         self._request_steps(
             start_time = self.start_time,
             end_time = datetime.now())
@@ -96,7 +97,7 @@ if __name__ == "__main__":
         secrets_file     = "client_secret.json",
         credentials_file = "token.pickle")
 
-    steps.download()
+    steps.update()
 
     steps.export_dataset(
         target_file = "steps_by_day.csv",
